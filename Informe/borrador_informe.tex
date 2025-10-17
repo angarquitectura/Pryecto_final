@@ -1,0 +1,227 @@
+
+\documentclass[12pt, a4paper]{article}
+\usepackage[spanish]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+% --- Configuración de Geometría de Página ---
+\geometry{
+    a4paper,
+    left=2.5cm,
+    right=2.5cm,
+    top=3cm,
+    bottom=3cm
+}
+
+% --- Configuración para enlaces (índice en negro) ---
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=black,
+    citecolor=black
+}
+
+% --- Configuración para Bloques de Código (Listings) ---
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+
+% --- Portada ---
+\title{
+    \textbf{Informe: Simulador de Sistemas de Archivos FAT y Ext2} \\
+    \large Análisis y Comparación de Mecanismos de Gestión de Bloques
+}
+\author{Angel Besteiro \\ Brigido Noguera}
+\date{9 de octubre de 2025}
+
+% --- Inicio del Documento ---
+\begin{document}
+
+% --- Página del Título ---
+\begin{titlepage}
+    \centering
+    \vfill % Espacio vertical antes del título
+    \maketitle
+    \vfill % Espacio vertical después del título
+    \thispagestyle{empty}
+\end{titlepage}
+
+
+% --- Página del Índice ---
+\newpage
+{ % Inicia un grupo para que los cambios de formato sean locales
+    \renewcommand{\baselinestretch}{1.5} % Aumenta el interlineado
+    \Large % Aumenta el tamaño de la fuente
+    \tableofcontents
+}
+\newpage
+
+
+% ===================================================================
+\section{El Problema}
+% ===================================================================
+
+El objetivo fundamental de este proyecto es el diseño y la implementación de un simulador de sistemas de archivos en C++. Este simulador modela el comportamiento de dos arquitecturas clásicas de gestión de almacenamiento en disco a nivel de bloques: \textbf{FAT (File Allocation Table)} y una versión simplificada de \textbf{Ext2 (Second Extended Filesystem)}.
+
+El propósito principal no es crear un sistema de archivos funcional para uso real, sino construir una herramienta didáctica que permita visualizar y comparar cómo cada sistema gestiona las operaciones básicas:
+
+\begin{itemize}
+    \item \textbf{Creación de archivos:} Asignación de bloques de datos en el disco y registro de la estructura del archivo.
+    \item \textbf{Lectura de archivos:} Localización y recuperación del contenido a partir de los metadatos del sistema.
+    \item \textbf{Eliminación de archivos:} Liberación de los bloques de datos y eliminación de las referencias al archivo.
+\end{itemize}
+
+A través de la simulación, se busca analizar los efectos de la fragmentación, la eficiencia en el uso del espacio y la complejidad de las estructuras de datos subyacentes en cada uno de estos modelos.
+
+% ===================================================================
+\section{Técnicas Computacionales para su Solución}
+% ===================================================================
+
+La solución se desarrolló en C++ (C++17) utilizando un paradigma de programación orientada a objetos para encapsular la lógica de cada componente del sistema.
+
+\subsection{Arquitectura General del Simulador}
+La arquitectura se fundamenta en la separación de responsabilidades, con una clase abstracta \texttt{FileSystem} que define una interfaz común y clases derivadas que implementan la lógica específica de FAT y Ext2.
+
+\begin{itemize}
+    \item \textbf{Clase \texttt{Disk}:} Simula el disco físico como un conjunto de bloques. Es un recurso compartido (gestionado mediante \texttt{std::shared\_ptr}) sobre el cual operan los sistemas de archivos.
+    
+    \item \textbf{Clase Base Abstracta \texttt{FileSystem}:} Define el contrato que cualquier sistema de archivos debe cumplir, con métodos virtuales puros como \texttt{create()}, \texttt{read()} y \texttt{del()}. Esto permite tratar a ambos sistemas de forma polimórfica.
+    
+    \item \textbf{Clases Concretas \texttt{FATFileSystem} y \texttt{Ext2FileSystem}:} Heredan de \texttt{FileSystem} y sobreescriben los métodos para implementar la lógica de asignación y gestión de bloques propia de cada sistema.
+\end{-itemize}
+
+\subsection{Estructuras de Datos Clave}
+
+\subsubsection{Sistema FAT}
+El sistema FAT se basa en una estructura de lista enlazada donde la "tabla" es el mapa que define los enlaces.
+
+\begin{itemize}
+    \item \textbf{Tabla de Asignación de Archivos (FAT):} Implementada como un \texttt{std::vector<int> fat\_table}. El índice del vector corresponde al número de bloque en el disco. El valor en esa posición indica el siguiente bloque del archivo. Se utilizan valores especiales como \texttt{FAT\_EOF (-1)} para el fin de archivo y \texttt{FAT\_FREE (0)} para un bloque libre.
+    
+    \item \textbf{Directorio:} Un \texttt{std::map<std::string, int>} que asocia el nombre de un archivo con su bloque de inicio. A partir de este bloque, se recorre la \texttt{fat\_table} para encontrar el resto del contenido.
+\end{itemize}
+
+\subsubsection{Sistema Ext2 (Simplificado)}
+El sistema Ext2 utiliza una asignación indexada, centralizando los metadatos de un archivo en una estructura llamada inodo.
+
+\begin{itemize}
+    \item \textbf{Tabla de Inodos:} Implementada como un \texttt{std::vector<Inode> inode\_table}. Cada archivo en el sistema tiene un inodo asignado.
+    
+    \item \textbf{Estructura \texttt{Inode}:} Contiene los metadatos del archivo. En nuestra simulación, incluye:
+    \begin{itemize}
+        \item Tamaño del archivo (\texttt{size}).
+        \item Punteros directos (\texttt{std::vector<int> direct\_pointers}): Un pequeño arreglo de punteros que apuntan directamente a los primeros bloques de datos del archivo.
+        \item Puntero indirecto simple (\texttt{int single\_indirect}): Un puntero que apunta a un bloque que, en lugar de datos, contiene una lista de punteros a más bloques de datos. Esto permite manejar archivos de mayor tamaño.
+    \end{itemize}
+    
+    \item \textbf{Directorio:} Al igual que en FAT, se usa un \texttt{std::map<std::string, int>}, pero en este caso asocia el nombre del archivo con su \textbf{número de inodo}, no con un bloque.
+\end{itemize}
+
+\subsection{Algoritmos Principales}
+
+\begin{itemize}
+    \item \textbf{Creación de Archivo (FAT):}
+    \begin{enumerate}
+        \item Se calcula el número de bloques necesarios.
+        \item Se buscan bloques libres en el disco.
+        \item Se enlazan estos bloques en la \texttt{fat\_table}, formando una lista enlazada. El último bloque apunta a \texttt{FAT\_EOF}.
+        \item Se escribe el contenido en los bloques del disco.
+        \item Se añade la entrada (nombre, bloque inicial) al directorio.
+    \end{enumerate}
+
+    \item \textbf{Creación de Archivo (Ext2):}
+    \begin{enumerate}
+        \item Se busca un inodo libre en la \texttt{inode\_table}.
+        \item Se buscan los bloques de datos necesarios en el disco.
+        \item Se asignan los bloques: primero se llenan los punteros directos del inodo.
+        \item Si se necesitan más bloques, se asigna un bloque adicional para actuar como bloque de punteros indirectos, y se llena con las direcciones de los bloques de datos restantes.
+        \item Se escribe el contenido en los bloques de datos.
+        \item Se añade la entrada (nombre, número de inodo) al directorio.
+    \end{enumerate}
+        
+    \item \textbf{Eliminación de Archivo (FAT):}
+    \begin{enumerate}
+        \item Se localiza el bloque inicial a través del directorio.
+        \item Se recorre la cadena de bloques en la \texttt{fat\_table}.
+        \item En cada paso, el bloque de disco se marca como libre y la entrada correspondiente en la \texttt{fat\_table} se establece en \texttt{FAT\_FREE}.
+        \item Se elimina la entrada del directorio.
+    \end{enumerate}
+\end{itemize}
+
+% ===================================================================
+\section{Análisis y Comparación de Resultados}
+% ===================================================================
+
+Aunque el simulador no mide el tiempo de ejecución, permite analizar lógicamente el rendimiento y la eficiencia de cada sistema.
+
+\subsection{Sistema FAT}
+\begin{itemize}
+    \item \textbf{Simplicidad:} Su mayor ventaja es la facilidad de implementación. La lógica de seguir una lista enlazada es directa.
+    \item \textbf{Fragmentación Externa:} Es su principal debilidad. Cuando los archivos se crean y eliminan repetidamente, los bloques de un nuevo archivo grande pueden quedar dispersos por todo el disco. Esto, en un disco mecánico real, se traduciría en un rendimiento de lectura muy bajo, ya que el cabezal del disco tendría que moverse constantemente.
+    \item \textbf{Rendimiento de Lectura:} El acceso a los datos es secuencial por naturaleza. Para leer el bloque N de un archivo, es necesario recorrer los N-1 enlaces previos en la tabla FAT, lo que lo hace ineficiente para el acceso aleatorio.
+\end{itemize}
+
+\subsection{Sistema Ext2}
+\begin{itemize}
+    \item \textbf{Eficiencia en Acceso:} El uso de inodos permite un acceso mucho más rápido a los datos. Para leer cualquier bloque de un archivo, el sistema solo necesita leer el inodo y desde allí obtiene la dirección directa del bloque de datos (o la del bloque indirecto). Esto es significativamente más rápido que recorrer una lista enlazada.
+    \item \textbf{Reducción de la Fragmentación:} Al tener los punteros a bloques de datos agrupados en el inodo (y en bloques indirectos), el sistema operativo puede tomar decisiones más inteligentes sobre la asignación de bloques, intentando mantenerlos contiguos y reduciendo la fragmentación externa.
+    \item \textbf{Escalabilidad:} El sistema de punteros indirectos (en esta simulación, solo simple, pero en la realidad incluye dobles y triples) permite que los archivos alcancen tamaños muy grandes de manera eficiente, superando con creces las limitaciones de FAT.
+    \item \textbf{Sobrecarga (Overhead):} La desventaja es una mayor complejidad y una ligera sobrecarga de espacio. Cada archivo requiere un inodo, y los archivos grandes requieren bloques adicionales solo para almacenar punteros, no datos.
+\end{itemize}
+
+\subsection{Comparación Directa}
+\begin{table}[h!]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Característica} & \textbf{FAT} & \textbf{Ext2 (Simplificado)} \\ \hline
+\textbf{Método de Asignación} & Lista Enlazada & Indexada (Inodos) \\ \hline
+\textbf{Fragmentación} & Alta (Externa) & Baja \\ \hline
+\textbf{Acceso Aleatorio} & Lento (debe recorrer la cadena) & Rápido (acceso directo desde el inodo) \\ \hline
+\textbf{Tamaño Máx. de Archivo} & Limitado & Muy grande (gracias a punteros indirectos) \\ \hline
+\textbf{Metadatos} & Mezclados en el directorio & Centralizados en el inodo \\ \hline
+\textbf{Complejidad} & Baja & Moderada-Alta \\ \hline
+\end{tabular}
+\caption{Comparación de características entre FAT y Ext2.}
+\end{table}
+
+El simulador evidencia que para un escenario con muchos archivos pequeños y operaciones simples, la simplicidad de FAT es adecuada. Sin embargo, en cuanto el tamaño de los archivos o el número de operaciones de borrado y reescritura aumenta, el modelo de Ext2 demuestra ser estructuralmente superior, garantizando un rendimiento más consistente y una mejor organización del disco.
+
+% ===================================================================
+\section{Conclusiones}
+% ===================================================================
+
+El simulador implementado cumple exitosamente su objetivo de modelar y contrastar los sistemas de archivos FAT y Ext2. A través de la implementación de sus estructuras de datos y algoritmos de gestión, se ha podido observar de forma práctica las ventajas y desventajas inherentes a cada arquitectura.
+
+Se concluye que la asignación por lista enlazada de \textbf{FAT}, aunque simple, es ineficiente y propensa a la fragmentación, limitando su uso a sistemas más simples o antiguos. Por otro lado, la asignación indexada mediante inodos de \textbf{Ext2} representa una solución mucho más robusta, escalable y eficiente, sentando las bases de los sistemas de archivos modernos utilizados en sistemas operativos como Linux.
+
+Este proyecto ha servido como una valiosa herramienta para solidificar la comprensión teórica de la gestión de almacenamiento a bajo nivel.
+
+\end{document}

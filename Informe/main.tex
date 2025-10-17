@@ -1,0 +1,410 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PREÁMBULO DEL DOCUMENTO
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass{beamer}
+
+% --- Paquetes Esenciales ---
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}       % Para incluir imágenes
+\usepackage{listings}       % Para formatear código fuente
+\usepackage{xcolor}         % Para colores en el código
+
+% --- Configuración del Tema y Colores ---
+\usetheme{Madrid} % Puedes cambiarlo por otros como Boadilla, AnnArbor, etc.
+\usecolortheme{default}
+\setbeamertemplate{footline}{}
+
+% --- Configuración para los listados de código (listings) ---
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\footnotesize\ttfamily,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+    language=C++
+}
+\lstset{style=mystyle}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% INFORMACIÓN DEL TÍTULO
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\title{Simulador de Sistemas de Archivos: FAT vs Ext2}
+\author{Brigido Noguera \\ Angel Besteiro} % <- CAMBIA ESTO
+\date{9 de octubre, 2025} % O pon una fecha específica: 25 de Octubre, 2025
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% INICIO DEL DOCUMENTO
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+
+% --- Diapositiva de Portada ---
+\begin{frame}
+  \maketitle
+\end{frame}
+
+% --- Diapositiva de Índice ---
+\begin{frame}{Índice}
+  \tableofcontents
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SECCIÓN 1: ASPECTOS GENERALES
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Aspectos generales}
+
+\begin{frame}{Aspectos generales}
+    \begin{columns}
+        \begin{column}{0.6\textwidth}
+            \begin{itemize}
+                \item Simulador modular en C++ diseñado para comparar dos arquitecturas de sistemas de archivo: \textbf{FAT} y \textbf{Ext2}.
+                \vspace{0.5cm}
+                \item Recrea operaciones \texttt{create}, \texttt{read} y \texttt{delete}.
+                \vspace{0.5cm}
+                \item Disco virtual simulado con un arreglo de \textbf{256 bloques}, donde cada bloque es de \textbf{64 bytes}.
+                \vspace{0.5cm}
+                \item El objetivo es profundizar en cómo la elección de estructuras para el manejo de \textbf{metadatos} es el factor principal en la escalabilidad y el rendimiento.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.4\textwidth}
+            \begin{figure}
+                \includegraphics[width=\textwidth]{Imagen1.png}
+                \caption{Jerarquía de un sistema de archivos.}
+            \end{figure}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SECCIÓN 2: FAT
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{FAT}
+
+\begin{frame}{FAT (File Allocation Table)}
+    \begin{block}{Concepto Clave}
+        FAT es una de las arquitecturas de gestión de almacenamiento más antiguas y sencillas. Utiliza una tabla central (la FAT) que actúa como un mapa del disco.
+    \end{block}
+    
+    \begin{columns}
+        \begin{column}{0.7\textwidth}
+            \begin{itemize}
+                \item La tabla FAT rastrea la ubicación de todos los datos. Cada entrada corresponde a un bloque del disco.
+                \vspace{0.5cm}
+                \item El directorio solo almacena un puntero al \textbf{primer bloque} del archivo.
+                \vspace{0.5cm}
+                \item Para leer un archivo, el sistema sigue una \textbf{lista enlazada} de bloques, consultando la tabla secuencialmente hasta encontrar el marcador de Fin de Archivo (\texttt{FAT\_EOF}).
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.35\textwidth}
+            \begin{figure}
+                \includegraphics[width=\textwidth]{Lista.png}
+                \caption{La FAT opera como una lista enlazada.}
+            \end{figure}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\subsection{Simulación}
+
+\begin{frame}[fragile]{Simulación FAT: Estructuras Clave}
+    \begin{block}{Definición en \texttt{proyecto.h}}
+        La simulación usa un \texttt{std::vector<int>} para la tabla FAT y un \texttt{std::map} para el directorio.
+        \begin{lstlisting}
+class FATFileSystem : public FileSystem {
+private:
+    // La tabla FAT: cada indice corresponde a un bloque.
+    std::vector<int> fat_table;
+    
+    // Directorio: mapea nombres de archivo a su bloque de inicio.
+    std::map<std::string, int> directory;
+public:
+    FATFileSystem(std::shared_ptr<Disk> d);
+    // ...
+};
+        \end{lstlisting}
+    \end{block}
+    \begin{block}{Constantes de Control}
+        \begin{lstlisting}
+const int FAT_EOF = -1;  // Marcador de Fin de Archivo
+const int FAT_FREE = 0;  // Marcador de bloque libre
+        \end{lstlisting}
+    \end{block}
+\end{frame}
+
+\begin{frame}[fragile]{Simulación FAT: Lógica de Creación}
+    \begin{block}{Pasos de \texttt{create} en \texttt{proyecto.cpp}}
+        \begin{enumerate}
+            \item Calcular y encontrar bloques libres.
+            \item Enlazar los bloques en la \texttt{fat\_table}, creando la lista enlazada.
+            \item El último bloque apunta a \texttt{FAT\_EOF}.
+            \item Escribir el contenido en los bloques del disco.
+            \item Registrar el archivo en el directorio con su bloque de inicio.
+        \end{enumerate}
+    \end{block}
+    
+    \begin{exampleblock}{Fragmento de código: Enlazando bloques}
+        \begin{lstlisting}
+// Enlaza los bloques en la tabla FAT.
+for (size_t i = 0; i < free_blocks.size() - 1; ++i) {
+    fat_table[free_blocks[i]] = free_blocks[i + 1];
+}
+fat_table[free_blocks.back()] = FAT_EOF;
+
+// Registra el archivo en el directorio.
+directory[filename] = free_blocks[0];
+        \end{lstlisting}
+    \end{exampleblock}
+\end{frame}
+
+\begin{frame}[fragile]{Simulación FAT: Lógica de Recorrido (Lectura)}
+    \begin{block}{Pasos de \texttt{read} en \texttt{proyecto.cpp}}
+        El recorrido es puramente secuencial. Se parte del bloque inicial y se sigue la cadena en la \texttt{fat\_table} hasta encontrar \texttt{FAT\_EOF}.
+    \end{block}
+    
+    \begin{exampleblock}{Fragmento de código: Lectura secuencial}
+        \begin{lstlisting}
+std::string FATFileSystem::read(const std::string& filename) {
+    if (!directory.count(filename)) {
+        return "Error: El archivo no existe.";
+    }
+
+    std::string content = "";
+    int current_block = directory[filename];
+
+    // Sigue la cadena en la tabla FAT hasta llegar al final.
+    while (current_block != FAT_EOF) {
+        content += disk->readBlock(current_block);
+        current_block = fat_table[current_block];
+    }
+    
+    return content.c_str(); 
+}
+        \end{lstlisting}
+    \end{exampleblock}
+\end{frame}
+
+
+\subsection{Ventajas}
+\begin{frame}{Ventajas de FAT}
+    \begin{itemize}
+        \item \textbf{Alta Compatibilidad:} Universalmente reconocido por Windows, macOS y Linux de forma nativa.
+        \vspace{0.5cm}
+        \item \textbf{Baja Sobrecarga:} Su estructura simple consume muy poco espacio de metadatos, ideal para dispositivos con bajos recursos.
+        \vspace{0.5cm}
+        \item \textbf{Simplicidad:} Fácil de implementar y recuperar en caso de errores. El mantenimiento del código es más sencillo.
+        \vspace{0.5cm}
+        \item \textbf{Velocidad en Archivos Pequeños:} La lectura es rápida si los archivos ocupan pocos bloques contiguos.
+    \end{itemize}
+\end{frame}
+
+\subsection{Desventajas}
+\begin{frame}{Desventajas de FAT}
+    \begin{itemize}
+        \item \textbf{Bajo Rendimiento:} La lectura es secuencial $O(N)$. Se debe recorrer bloque a bloque, lo que es muy lento en archivos grandes y fragmentados.
+        \vspace{0.5cm}
+        \item \textbf{Riesgo de Corrupción:} No tiene registro de transacciones (journaling). Un fallo de energía puede corromper la tabla FAT fácilmente.
+        \vspace{0.5cm}
+        \item \textbf{Límites de Tamaño:} Versiones como FAT32 limitan los archivos a 4GB, insuficiente para aplicaciones modernas (video, bases de datos).
+        \vspace{0.5cm}
+        \item \textbf{Espacio Inútil:} La fragmentación interna y el tamaño fijo de los clústeres pueden desperdiciar mucho espacio.
+    \end{itemize}
+\end{frame}
+
+\subsection{Usos Realistas}
+\begin{frame}{Aplicaciones Realistas de FAT}
+    \begin{itemize}
+        \item \textbf{Unidades Flash y Dispositivos de Memoria:} Es el estándar de facto para pendrives, tarjetas SD, cámaras y GPS debido a su compatibilidad universal.
+        \vspace{0.5cm}
+        \item \textbf{Sistemas Embebidos:} Común en firmware de routers, impresoras y microcontroladores por su simplicidad y bajo consumo de recursos.
+        \vspace{0.5cm}
+        \item \textbf{Particiones de Arranque (EFI):} La partición de arranque en la mayoría de los PCs modernos está formateada en FAT32 porque el firmware UEFI la reconoce nativamente.
+    \end{itemize}
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SECCIÓN 3: EXT2
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Ext2}
+
+\begin{frame}{Ext2 (Second Extended Filesystem)}
+    \begin{block}{Concepto Clave}
+        Ext2 separa los metadatos del contenido real del archivo mediante el uso de \textbf{inodos} (nodos de índice).
+    \end{block}
+    
+    \begin{columns}
+        \begin{column}{0.7\textwidth}
+            \begin{itemize}
+                \item Cada archivo es representado por un único inodo, que contiene sus metadatos (tamaño, permisos, etc.) y un conjunto de punteros a los bloques de datos.
+                \vspace{0.5cm}
+                \item Utiliza \textbf{punteros directos} para un acceso rápido a archivos pequeños.
+                \vspace{0.5cm}
+                \item Emplea \textbf{punteros indirectos} para gestionar eficientemente archivos grandes, evitando recorridos secuenciales.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.4\textwidth}
+            \begin{figure}
+                \includegraphics[width=\textwidth]{Ext.png}
+                \caption{Estructura de un Inodo con punteros.}
+            \end{figure}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\subsection{Simulación}
+
+\begin{frame}[fragile]{Simulación Ext2: Estructura del Inodo}
+    \begin{block}{Definición del Inodo en \texttt{proyecto.h}}
+        El inodo contiene metadatos y los punteros que son la clave de su funcionamiento.
+        \begin{lstlisting}
+struct Inode {
+    bool is_used = false;
+    int size = 0;
+    // Punteros directos a bloques de datos.
+    std::vector<int> direct_pointers;
+    // Puntero a un bloque que contiene mas punteros.
+    int single_indirect = -1;       
+
+    Inode() : direct_pointers(NUM_DIRECT_POINTERS, -1) {}
+};
+        \end{lstlisting}
+    \end{block}
+    
+\end{frame}
+\begin{frame}[fragile]{Simulación Ext2: La Tabla de Inodos}
+    \begin{block}{Declaración de Estructuras Clave en \texttt{proyecto.h}}
+        Las estructuras centrales de Ext2 son la Tabla de Inodos y el Directorio.
+        \begin{lstlisting}[language=C++]
+// --- Implementación del Sistema de Archivos Ext2 ---
+class Ext2FileSystem : public FileSystem {
+private:
+    // Tabla de inodos: un vector donde cada inodo describe un archivo.
+    std::vector<Inode> inode_table;
+    // Directorio: mapea nombres de archivo a su número de inodo.
+    std::map<std::string, int> directory;
+    // ...
+};
+        \end{lstlisting}
+    \end{block}
+
+    \begin{block}{Propósito}
+        \begin{itemize}
+            \item \textbf{\texttt{inode\_table}:} Es el arreglo principal de metadatos. Cada entrada (\textit{Inodo}) almacena los atributos del archivo y sus punteros a bloques de datos.
+        \end{itemize}
+    \end{block}
+    
+    \begin{exampleblock}{Inicialización de la Tabla en \texttt{proyecto.cpp}}
+        \begin{lstlisting}[language=C++]
+// Constructor de Ext2: inicializa la tabla de inodos.
+Ext2FileSystem::Ext2FileSystem(std::shared_ptr<Disk> d) : FileSystem(d) {
+    inode_table.resize(32); // Limitamos a 32 inodos para esta simulación.
+}
+        \end{lstlisting}
+    \end{exampleblock}
+\end{frame}
+
+\begin{frame}[fragile]{Simulación Ext2: Lógica de Acceso a Punteros}
+    \begin{block}{Lectura en \texttt{proyecto.cpp}}
+        El acceso es jerárquico: primero se leen los bloques directos y luego, si es necesario, se procesa el bloque de punteros indirectos.
+    \end{block}
+    
+    \begin{exampleblock}{Fragmento de código: Acceso a datos}
+        \begin{lstlisting}
+// 1. Leer desde punteros directos.
+for (int block_ptr : inode.direct_pointers) {
+    if (block_ptr != -1) {
+        content += disk->readBlock(block_ptr);
+    }
+}
+// 2. Leer desde puntero indirecto simple.
+if (inode.single_indirect != -1) {
+    std::string pointer_block_content = 
+        disk->readBlock(inode.single_indirect);
+    // ...se procesa el bloque de punteros...
+}
+// Recorta el contenido al tamano real del archivo.
+return content.substr(0, inode.size);
+        \end{lstlisting}
+    \end{exampleblock}
+\end{frame}
+
+
+\subsection{Ventajas}
+\begin{frame}{Ventajas de Ext2}
+    \begin{itemize}
+        \item \textbf{Acceso Rápido:} El acceso a cualquier bloque requiere un número pequeño y constante de pasos (desreferencias), en lugar de un recorrido secuencial.
+        \vspace{0.5cm}
+        \item \textbf{Gestión de Archivos Grandes:} El mecanismo de punteros indirectos permite manejar archivos enormes de forma eficiente y escalable.
+        \vspace{0.5cm}
+        \item \textbf{Mejor Integridad de Metadatos:} Separar los metadatos en el inodo permite un acceso y modificación más seguros y eficientes.
+        \vspace{0.5cm}
+        \item \textbf{Menos Fragmentación:} La asignación jerárquica reduce el impacto de la fragmentación, ya que la velocidad de acceso no depende de la distancia física entre bloques.
+    \end{itemize}
+\end{frame}
+
+\subsection{Desventajas}
+\begin{frame}{Desventajas de Ext2}
+    \begin{itemize}
+        \item \textbf{Falta de Journaling:} Al igual que FAT, no tiene un registro de transacciones. Un fallo de sistema requiere una revisión completa del disco (\texttt{fsck}), que puede ser muy lenta.
+        \vspace{0.5cm}
+        \item \textbf{Mayor Sobrecarga:} Las estructuras de inodos y punteros consumen más espacio en disco para la gestión de metadatos que FAT.
+        \vspace{0.5cm}
+        \item \textbf{Complejidad:} La lógica para manejar la estructura de punteros es significativamente más compleja, lo que dificulta su implementación y mantenimiento.
+        \vspace{0.5cm}
+        \item \textbf{Tiempo de Eliminación:} Borrar un archivo muy grande puede ser lento, ya que se deben liberar todos los bloques de datos y también los bloques de punteros indirectos.
+    \end{itemize}
+\end{frame}
+
+\subsection{Usos Realistas}
+\begin{frame}{Aplicaciones Realistas de Ext2}
+    \begin{itemize}
+        \item \textbf{Distribuciones Clásicas de Linux:} Fue el sistema de archivos por defecto en muchas distribuciones de Linux (como Debian y Red Hat) durante los años 90, antes de ser sucedido por Ext3 y Ext4.
+        \vspace{0.5cm}
+        \item \textbf{Particiones Varias:} A veces se sigue usando en particiones que no requieren journaling, como una partición \texttt{/boot}, o en sistemas donde la velocidad de escritura es crítica y el riesgo de corrupción es bajo.
+        \vspace{0.5cm}
+        \item \textbf{Almacenamiento de Red (NAS):} Puede encontrarse en servidores de archivos o dispositivos NAS más antiguos o de bajo rendimiento donde la simplicidad y la velocidad sin journaling son aceptables.
+    \end{itemize}
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SECCIÓN 4: CONCLUSIÓN
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Conclusión}
+
+\begin{frame}{Conclusiones}
+    \begin{alertblock}{Rendimiento y Escalabilidad}
+    El proyecto de simulación demuestra que la elección de la estructura de metadatos es el factor más crítico en el diseño de un sistema de archivos, determinando su rendimiento y escalabilidad.
+    \end{alertblock}
+
+    \begin{itemize}
+        \item La \textbf{lista enlazada de FAT} es simple pero no escala, resultando en un rendimiento pobre para archivos grandes.
+        \vspace{0.5cm}
+        \item La \textbf{estructura de inodos de Ext2} proporciona un acceso rápido y eficiente, sin importar el tamaño del archivo, a costa de una mayor complejidad.
+    \end{itemize}
+
+    \begin{beamercolorbox}[rounded=true,shadow=true,sep=12pt]{block body}
+    El simulador ilustra de manera práctica por qué las arquitecturas modernas favorecen los Inodos (o estructuras similares) para asegurar la robustez y el alto rendimiento que exigen los entornos informáticos actuales.
+    \end{beamercolorbox}
+\end{frame}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% FIN DEL DOCUMENTO
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\end{document}
+Aquí en este latex si quiero quitar el pie de página en todas las diapositivas como lo hago que línea tengo que quitar, además como pongo la fecha específica, en la sección de today que debo poner

@@ -1,0 +1,76 @@
+instrucciones
+resumen-Mips32
+lenguaje maquina,un concepto clave que es necesario aprender oara trabajar con computadoras, dicho lenguaje se compone de una serie de "instrucciones" o "pasos a seguir" que el equipo sigue para completar una tarea en especifico, existen muchos lenguajes de programacion que en retrospectiva no se diferencian demasiado entre si, y que los equipos que emplean dichos lenguajes tienen requerimientos objetivos y sobre todo propositos similares, claro cada lenguaje tiene sus agregados, sus ventajas y desventajas y por ahora depende de la mano humana elegir sabiamente cual usa.
+El lenguaje que presentamos hoy es lo que se conoce como un lenguaje de bajo nivel, es un lenguaje que esta mas cerca del lenguaje maquina porpiamente dicho,el procesador opera con instrucciones en binario mediante este lenguaje podemos darle isntrucciones que son traducidas al binario y nos retornan resultados que son interpretados del binario oara entenderlos, como se comento el lenguaje se basa en instrucciones y el Mips32 ensamblador al que se refiere este escrito tiene una serie de instrucciones preestablecidas para usar, con el fin de agilizar el codigo y el flujo del algoritmo 
+Se cuenta con memoria y registros,la memoria es donde se almacenan los datos de distinto tipo, los registros son memoria tambien pero una donde el sistema puede operar, la memoria tiene que ser llevada de donde se almacena a un registro para ser usada en las operaciones y luego devuelta a su origen o a otro dentro de la memoria, se cuenta con 32 resgistros, algunos son especificos y otros de uso mas general.
+
+Operaciones 
+
+Aritméticas 
+add 
+add inmediate
+substract
+Estas operaciones son basicas en todo sistema, suma resta, add cuyo formato es add($s1,$s2,$s3)=$s1=$s2+$s3 toma la primera "variable" y coloca el resultado de la suma en ella,sumando asi las dos ultimas "variables" en la primera, add inmediate es parecida pero se usa para cargar "datos" o constantes con un formato addi($s1,$s2,100), substrac funciona como una resta con formato sub($s1,$s2,$s3)=$s1=$s2-$s3 haciendo asi la diferencia de los ultimos componentes en el primero 
+
+transferencia de datos 
+
+Operaciones especificas para movilizar datos entre espacios de memoria y registros
+load word: moviliza una palabra de una dirección de memoria a un registro
+store word: moviliza una palabra de registro a una direccion de memoria 
+load half: carga media oalabea de memoria a resgistros
+store half: carga media palabra de registros a memoria 
+load byte: carga un byte de memoria a registros
+store byte: carga un byte de registro s memoria 
+load upper inmed: carga constante 16 bits mayor peso 
+
+lógica 
+
+Instrucciones que contemplan expresiones logicas 
+and:opera bit a bit con tres registros,compuerta and
+or:opera bit a bit con tres registros,compuerta or
+not:opera bit a bit con tres registros,compuerta not
+and inmediate:opera bit a bit con tres valores, registros y constante,compuerta and
+or inmediate:opera bit a bit con tres valores resgistros y constante,compuerta or
+shift left logical:desplazamiento izquierda constante 
+shift right logical: desplazamiento derecha constante 
+
+Salto condicional
+
+branch on equal: comprueba igualdad
+branch on not equal: comprueba su no igual que 
+set on less than:compara si es menor que 
+set on less than inmediate:compara si es menor que una constante
+
+salto incondicional 
+
+jump:salta a destino
+jump register:para retornar un procedimiento 
+jump and link:para llamada a procedimiento
+
+
+* $zero o $0 (Registro 0):
+Siempre contiene el valor 0. No se puede escribir en él. Es útil para inicializar registros a cero o para operaciones que requieren un cero.
+ * $at o $1 (Assembler Temporary):
+Reservado para el ensamblador. El ensamblador puede usarlo para convertir pseudo-instrucciones en una secuencia de instrucciones reales. No deberías usar este registro en tu código.
+ * $v0-$v1 o $2-$3 (Value):
+Utilizados para retornar valores de funciones. $v0 es el registro principal para el valor de retorno, y $v1 se usa para un segundo valor de retorno si es necesario.
+ * $a0-$a3 o $4-$7 (Argument):
+Utilizados para pasar los primeros cuatro argumentos a una función. Si una función tiene más de cuatro argumentos, los restantes se pasan en la pila. Importante: Estos registros no se preservan entre llamadas a funciones (son "caller-saved"), lo que significa que si una función que llamas los modifica y necesitas su valor después, debes guardarlos antes de la llamada.
+ * $t0-$t9 o $8-$15, $24-$25 (Temporary):
+Registros temporales. Se utilizan para almacenar valores que no necesitan ser preservados a través de llamadas a funciones. Son "caller-saved", lo que significa que la función que los llama es responsable de guardarlos si necesita su valor después de una subrutina.
+ * $s0-$s7 o $16-$23 (Saved):
+Registros guardados. Se utilizan para almacenar valores que deben preservarse a través de llamadas a funciones. Son "callee-saved", lo que significa que si una función llamada los va a usar, es responsable de guardarlos antes de usarlos y restaurarlos antes de regresar al llamador.
+ * $k0-$k1 o $26-$27 (Kernel):
+Propósito: Reservados para el sistema operativo (kernel). Los programas de usuario no deben usarlos, ya que el kernel puede modificarlos en cualquier momento (por ejemplo, durante interrupciones).
+ * $gp o $28 (Global Pointer):
+Puntero a la sección de datos globales. Facilita el acceso a variables globales y estáticas que se encuentran en una región de memoria cercana al puntero global.
+ * $sp o $29 (Stack Pointer):
+Puntero de pila. Apunta al tope de la pila. Se utiliza para gestionar el marco de pila en llamadas a funciones (asignar espacio para variables locales y guardar registros).
+ * $fp o $30 (Frame Pointer):
+Puntero de marco. Apunta a una posición fija dentro del marco de pila actual, lo que facilita el acceso a los argumentos y variables locales cuando el $sp puede cambiar. No siempre se usa en todos los compiladores o convenciones.
+ * $ra o $31 (Return Address):
+Dirección de retorno. Almacena la dirección de la instrucción inmediatamente después de una llamada a función (jal). Cuando la función termina, salta a la dirección almacenada en $ra para continuar la ejecución del programa llamador.
+
+
+
+ 
